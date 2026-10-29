@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"math"
 	"sort"
+	"strconv"
 
 	"github.com/dustin/go-humanize"
 	"github.com/juicedata/juicefs/pkg/meta"
@@ -114,6 +115,10 @@ $ juicefs quota delete redis://localhost --gid 100`,
 			&cli.Uint64Flag{
 				Name:  "gid",
 				Usage: "group ID for group quota management",
+			},
+			&cli.BoolFlag{
+				Name:  "csv",
+				Usage: "print result in csv format with sizes in bytes",
 			},
 		},
 	}
@@ -210,11 +215,11 @@ func quota(c *cli.Context) error {
 		return nil
 	}
 
-	printQuotaResult(qtype, qs)
+	printQuotaResult(qtype, qs, c.Bool("csv"))
 	return nil
 }
 
-func printQuotaResult(qtype uint32, qs map[string]*meta.Quota) {
+func printQuotaResult(qtype uint32, qs map[string]*meta.Quota, csv bool) {
 	result := make([][]string, 1, len(qs)+1)
 	var firstCol string
 	switch qtype {
@@ -244,20 +249,32 @@ func printQuotaResult(qtype uint32, qs map[string]*meta.Quota) {
 			logger.Warnf("Used inodes of %s is negative (%d), please run `juicefs quota check` to fix it", p, q.UsedInodes)
 			q.UsedInodes = 0
 		}
-		used := humanize.IBytes(uint64(q.UsedSpace))
-		iused := humanize.Comma(q.UsedInodes)
-		size, usedR := "unchanged", ""
+		bytesStr := func(v int64) string { return humanize.IBytes(uint64(v)) }
+		countStr := humanize.Comma
+		size, itotal := "unchanged", "unchanged"
+		if csv {
+			bytesStr = func(v int64) string { return strconv.FormatInt(v, 10) }
+			countStr = func(v int64) string { return strconv.FormatInt(v, 10) }
+			size, itotal = "", ""
+		}
+		used := bytesStr(q.UsedSpace)
+		iused := countStr(q.UsedInodes)
+		var usedR string
 		if q.MaxSpace > 0 {
-			size = humanize.IBytes(uint64(q.MaxSpace))
+			size = bytesStr(q.MaxSpace)
 			usedR = fmt.Sprintf("%d%%", q.UsedSpace*100/q.MaxSpace)
 		}
-		itotal, iusedR := "unchanged", ""
+		var iusedR string
 		if q.MaxInodes > 0 {
-			itotal = humanize.Comma(q.MaxInodes)
+			itotal = countStr(q.MaxInodes)
 			iusedR = fmt.Sprintf("%d%%", q.UsedInodes*100/q.MaxInodes)
 		}
 
 		result = append(result, []string{p, size, used, usedR, itotal, iused, iusedR})
 	}
-	printResult(result, 0, false)
+	if csv {
+		printCSVResult(result)
+	} else {
+		printResult(result, 0, false)
+	}
 }
