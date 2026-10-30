@@ -1,0 +1,43 @@
+name: release
+
+on:
+  push:
+    tags:
+      - v*
+
+permissions:
+  contents: write
+
+jobs:
+  releaser:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Set up Go
+        uses: actions/setup-go@v7
+        with:
+          go-version: "1.26"
+
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 1
+
+      - name: Build
+        run: make juicefs.lite
+
+      - name: Package
+        run: |
+          set -e
+          archive="juicefs-${GITHUB_REF_NAME#v}-linux-amd64.tar.gz"
+          mkdir dist
+          cp juicefs.lite dist/juicefs
+          tar -C dist -czf "$archive" juicefs
+          echo "ARCHIVE=$archive" >> "$GITHUB_ENV"
+
+      - name: Upload release assets
+        uses: softprops/action-gh-release@v3
+        with:
+          files: |
+            ${{ env.ARCHIVE }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
