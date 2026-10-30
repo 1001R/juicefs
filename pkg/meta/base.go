@@ -344,6 +344,7 @@ type baseMeta struct {
 	dirQuotaMaxInodesG  *prometheus.GaugeVec
 	dirQuotaUsedSpaceG  *prometheus.GaugeVec
 	dirQuotaUsedInodesG *prometheus.GaugeVec
+	dirQuotaPeakSpaceG  *prometheus.GaugeVec
 
 	userQuotaMaxSpaceG   *prometheus.GaugeVec
 	userQuotaMaxInodesG  *prometheus.GaugeVec
@@ -460,6 +461,13 @@ func newBaseMeta(addr string, conf *Config) *baseMeta {
 			},
 			[]string{"inode"},
 		),
+		dirQuotaPeakSpaceG: prometheus.NewGaugeVec(
+			prometheus.GaugeOpts{
+				Name: "dir_quota_peak_space_bytes",
+				Help: "Directory quota peak used space in bytes.",
+			},
+			[]string{"inode"},
+		),
 		userQuotaMaxSpaceG: prometheus.NewGaugeVec(
 			prometheus.GaugeOpts{
 				Name: "user_quota_max_space_bytes",
@@ -553,6 +561,7 @@ func (m *baseMeta) InitSharedMetrics(reg prometheus.Registerer) {
 	reg.MustRegister(m.dirQuotaMaxInodesG)
 	reg.MustRegister(m.dirQuotaUsedSpaceG)
 	reg.MustRegister(m.dirQuotaUsedInodesG)
+	reg.MustRegister(m.dirQuotaPeakSpaceG)
 	reg.MustRegister(m.userQuotaMaxSpaceG)
 	reg.MustRegister(m.userQuotaMaxInodesG)
 	reg.MustRegister(m.userQuotaUsedSpaceG)

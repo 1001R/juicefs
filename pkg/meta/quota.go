@@ -47,6 +47,16 @@ type Quota struct {
 	MaxSpace, MaxInodes   int64
 	UsedSpace, UsedInodes int64
 	newSpace, newInodes   int64
+	peakSpace             int64 // high-water mark of UsedSpace
+}
+
+func atomicMax(addr *int64, val int64) {
+	for {
+		old := atomic.LoadInt64(addr)
+		if val <= old || atomic.CompareAndSwapInt64(addr, old, val) {
+			return
+		}
+	}
 }
 
 type iQuota struct {
@@ -85,6 +95,7 @@ func (q *Quota) snap() Quota {
 		UsedInodes: atomic.LoadInt64(&q.UsedInodes),
 		newSpace:   atomic.LoadInt64(&q.newSpace),
 		newInodes:  atomic.LoadInt64(&q.newInodes),
+		peakSpace:  atomic.LoadInt64(&q.peakSpace),
 	}
 }
 
@@ -534,9 +545,10 @@ func (m *baseMeta) collectQuotas(qtype uint32, quotas map[uint64]*Quota) []*iQuo
 
 func (m *baseMeta) updateQuota(q *Quota, newSpace, newInodes int64) {
 	atomic.AddInt64(&q.newSpace, -newSpace)
-	atomic.AddInt64(&q.UsedSpace, newSpace)
+	used := atomic.AddInt64(&q.UsedSpace, newSpace)
 	atomic.AddInt64(&q.newInodes, -newInodes)
 	atomic.AddInt64(&q.UsedInodes, newInodes)
+	atomicMax(&q.peakSpace, used)
 }
 
 func (m *baseMeta) doFlushQuotas() {
@@ -1105,6 +1117,7 @@ func (m *baseMeta) updateDirQuotaMetrics(dirQuotas map[uint64]Quota) {
 		m.dirQuotaMaxInodesG.WithLabelValues(inodeStr).Set(float64(quota.MaxInodes))
 		m.dirQuotaUsedSpaceG.WithLabelValues(inodeStr).Set(float64(quota.UsedSpace))
 		m.dirQuotaUsedInodesG.WithLabelValues(inodeStr).Set(float64(quota.UsedInodes))
+		m.dirQuotaPeakSpaceG.WithLabelValues(inodeStr).Set(float64(quota.peakSpace))
 		m.dirQuotaMetricKeys[inode] = true
 	}
 }
@@ -1163,6 +1176,7 @@ func (m *baseMeta) cleanupQuotaMetrics() {
 			m.dirQuotaMaxInodesG.DeleteLabelValues(inodeStr)
 			m.dirQuotaUsedSpaceG.DeleteLabelValues(inodeStr)
 			m.dirQuotaUsedInodesG.DeleteLabelValues(inodeStr)
+			m.dirQuotaPeakSpaceG.DeleteLabelValues(inodeStr)
 			delete(m.dirQuotaMetricKeys, inode)
 		}
 	}
